@@ -7,10 +7,15 @@ function asaasBase() {
 }
 
 function asaasKey() {
-  let key = process.env.ASAAS_API_KEY?.trim() ?? "";
-  // Na Vercel, "$..." é interpolação de env. Use "$$aact_..." ou cole sem o $.
-  if (key.startsWith("$$")) key = key.slice(1);
-  if (key.startsWith("aact_")) key = `$${key}`;
+  let raw = process.env.ASAAS_API_KEY?.trim() ?? "";
+  if (!raw) return "";
+
+  // Se colaram a chave várias vezes / com $$ da Vercel, pega só o primeiro token válido
+  const match = raw.match(/\$?aact_[A-Za-z0-9:_-]+/);
+  if (!match) return raw.split(/\s+/)[0] ?? "";
+
+  let key = match[0];
+  if (!key.startsWith("$")) key = `$${key}`;
   return key;
 }
 
