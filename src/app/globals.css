@@ -1,26 +1,155 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-sky-top: #1a2332;
+  --bg-sky-mid: #243044;
+  --bg-ground: #2a3340;
+  --asphalt: #1c1e24;
+  --asphalt-line: #e8c547;
+  --lula: #e53935;
+  --lula-deep: #b71c1c;
+  --lula-soft: rgba(229, 57, 53, 0.18);
+  --flavio: #42a5f5;
+  --flavio-deep: #1565c0;
+  --flavio-soft: rgba(66, 165, 245, 0.18);
+  --ink: #eef2f7;
+  --muted: #9aa6b5;
+  --paper: rgba(18, 24, 34, 0.72);
+  --white: #ffffff;
+  --shadow: rgba(0, 0, 0, 0.45);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-paper: var(--paper);
+  --color-lula: var(--lula);
+  --color-lula-deep: var(--lula-deep);
+  --color-lula-soft: var(--lula-soft);
+  --color-flavio: var(--flavio);
+  --color-flavio-deep: var(--flavio-deep);
+  --color-flavio-soft: var(--flavio-soft);
+  --color-asphalt: var(--asphalt);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-body), system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse 90% 55% at 20% 0%, rgba(229, 57, 53, 0.22) 0%, transparent 50%),
+    radial-gradient(ellipse 90% 55% at 80% 0%, rgba(66, 165, 245, 0.2) 0%, transparent 50%),
+    radial-gradient(ellipse 120% 70% at 50% 100%, rgba(0, 0, 0, 0.35) 0%, transparent 55%),
+    linear-gradient(180deg, var(--bg-sky-top) 0%, var(--bg-sky-mid) 48%, var(--bg-ground) 100%);
+  min-height: 100vh;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(
+      -18deg,
+      transparent,
+      transparent 40px,
+      rgba(255, 255, 255, 0.02) 40px,
+      rgba(255, 255, 255, 0.02) 41px
+    );
+  z-index: 0;
+}
+
+.font-display {
+  font-family: var(--font-display), Impact, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes dash {
+  to {
+    background-position: 40px 0;
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    filter: drop-shadow(0 0 12px currentColor);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes count-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-bob {
+  animation: bob 0.55s ease-in-out infinite;
+}
+
+.animate-bob-delay {
+  animation: bob 0.55s ease-in-out infinite;
+  animation-delay: 0.28s;
+}
+
+.track-dashes {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--asphalt-line) 0 18px,
+    transparent 18px 36px
+  );
+  animation: dash 0.8s linear infinite;
+}
+
+.fade-up {
+  animation: slide-up 0.6s ease-out both;
+}
+
+.pop-once {
+  animation: count-pop 0.45s ease-out;
+}
+
+.lead-glow {
+  animation: pulse-glow 1.8s ease-in-out infinite;
 }
