@@ -144,12 +144,12 @@ export function statusMessage(score: Score): string {
   const leader = getLeader(score);
   const gap = Math.abs(score.lula - score.flavio);
   if (leader === "empate") return "Ninguém abriu vantagem ainda";
-  if (gap < 80) {
+  if (gap < 400) {
     return leader === "lula"
       ? "Lula puxa por pouco — corrida apertada"
       : "Flávio respira no ombro — corrida apertada";
   }
-  if (gap < 400) {
+  if (gap < 2000) {
     return leader === "lula"
       ? "Time vermelho abre leve vantagem na pista"
       : "Time azul abre leve vantagem na pista";

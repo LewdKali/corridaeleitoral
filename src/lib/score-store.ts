@@ -10,6 +10,12 @@ type PaidScore = {
   updatedAt: string;
 };
 
+/** Placar base (sempre visível). Pagamentos reais somam em cima. */
+export const BASE_SCORE = {
+  lula: Number(process.env.SCORE_BASE_LULA ?? 23418),
+  flavio: Number(process.env.SCORE_BASE_FLAVIO ?? 22173),
+} as const;
+
 const EMPTY_PAID: PaidScore = {
   lula: 0,
   flavio: 0,
@@ -36,7 +42,6 @@ function redis() {
 }
 
 function filePath() {
-  // Local: pasta data/. Na Vercel sem Redis, /tmp NÃO sobrevive — por isso Redis é obrigatório em prod.
   const root = process.env.VERCEL ? "/tmp" : path.join(process.cwd(), "data");
   return path.join(root, "score.json");
 }
@@ -50,6 +55,14 @@ function normalize(raw: Partial<PaidScore> | null | undefined): PaidScore {
       ? raw.appliedPayments.map(String).slice(-500)
       : [],
     updatedAt: raw.updatedAt ?? new Date().toISOString(),
+  };
+}
+
+function toDisplay(paid: PaidScore): Score {
+  return {
+    lula: BASE_SCORE.lula + paid.lula,
+    flavio: BASE_SCORE.flavio + paid.flavio,
+    updatedAt: paid.updatedAt,
   };
 }
 
@@ -103,12 +116,7 @@ export function persistenceMode(): "redis" | "file" {
 }
 
 export async function readScore(): Promise<Score> {
-  const paid = await readPaid();
-  return {
-    lula: paid.lula,
-    flavio: paid.flavio,
-    updatedAt: paid.updatedAt,
-  };
+  return toDisplay(await readPaid());
 }
 
 export async function applyPaidDelta(delta: {
@@ -119,21 +127,12 @@ export async function applyPaidDelta(delta: {
   const paid = await readPaid();
 
   if (delta.paymentId && paid.appliedPayments.includes(delta.paymentId)) {
-    return {
-      lula: paid.lula,
-      flavio: paid.flavio,
-      updatedAt: paid.updatedAt,
-    };
+    return toDisplay(paid);
   }
 
   paid.lula = Math.max(0, paid.lula + (delta.lula ?? 0));
   paid.flavio = Math.max(0, paid.flavio + (delta.flavio ?? 0));
   if (delta.paymentId) paid.appliedPayments.push(delta.paymentId);
 
-  const next = await writePaid(paid);
-  return {
-    lula: next.lula,
-    flavio: next.flavio,
-    updatedAt: next.updatedAt,
-  };
+  return toDisplay(await writePaid(paid));
 }
