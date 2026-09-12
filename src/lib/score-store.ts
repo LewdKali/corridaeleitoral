@@ -3,31 +3,42 @@ import { promises as fs } from "fs";
 import path from "path";
 import type { Score } from "./votes";
 
-type PaidScore = {
+type StoreScore = {
   lula: number;
   flavio: number;
   appliedPayments: string[];
   updatedAt: string;
 };
 
-/** Placar base (sempre visível). Pagamentos reais somam em cima. */
-export const BASE_SCORE = {
-  lula: Number(process.env.SCORE_BASE_LULA ?? 23418),
-  flavio: Number(process.env.SCORE_BASE_FLAVIO ?? 22173),
-} as const;
+/** Valores fictícios iniciais (e piso se o Redis falhar). */
+function baseLula() {
+  const raw = process.env.SCORE_BASE_LULA?.trim();
+  if (!raw) return 23418;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 23418;
+}
 
-const EMPTY_PAID: PaidScore = {
-  lula: 0,
-  flavio: 0,
-  appliedPayments: [],
-  updatedAt: new Date().toISOString(),
-};
+function baseFlavio() {
+  const raw = process.env.SCORE_BASE_FLAVIO?.trim();
+  if (!raw) return 22173;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 22173;
+}
+
+function defaultScore(): StoreScore {
+  return {
+    lula: baseLula(),
+    flavio: baseFlavio(),
+    appliedPayments: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 const REDIS_KEY = "corrida:score";
 
 declare global {
   // eslint-disable-next-line no-var
-  var __racePaidScore: PaidScore | undefined;
+  var __racePaidScore: StoreScore | undefined;
 }
 
 function hasRedis() {
@@ -38,7 +49,10 @@ function hasRedis() {
 }
 
 function redis() {
-  return Redis.fromEnv();
+  return new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL!.trim(),
+    token: process.env.UPSTASH_REDIS_REST_TOKEN!.trim(),
+  });
 }
 
 function filePath() {
@@ -46,32 +60,51 @@ function filePath() {
   return path.join(root, "score.json");
 }
 
-function normalize(raw: Partial<PaidScore> | null | undefined): PaidScore {
-  if (!raw) return { ...EMPTY_PAID, updatedAt: new Date().toISOString() };
+function normalize(raw: unknown): StoreScore | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  const lula = Number(obj.lula);
+  const flavio = Number(obj.flavio);
+  if (!Number.isFinite(lula) || !Number.isFinite(flavio)) return null;
   return {
-    lula: Math.max(0, Number(raw.lula) || 0),
-    flavio: Math.max(0, Number(raw.flavio) || 0),
-    appliedPayments: Array.isArray(raw.appliedPayments)
-      ? raw.appliedPayments.map(String).slice(-500)
+    lula: Math.max(0, Math.floor(lula)),
+    flavio: Math.max(0, Math.floor(flavio)),
+    appliedPayments: Array.isArray(obj.appliedPayments)
+      ? obj.appliedPayments.map(String).slice(-500)
       : [],
-    updatedAt: raw.updatedAt ?? new Date().toISOString(),
+    updatedAt:
+      typeof obj.updatedAt === "string"
+        ? obj.updatedAt
+        : new Date().toISOString(),
   };
 }
 
-function toDisplay(paid: PaidScore): Score {
+function toScore(store: StoreScore): Score {
   return {
-    lula: BASE_SCORE.lula + paid.lula,
-    flavio: BASE_SCORE.flavio + paid.flavio,
-    updatedAt: paid.updatedAt,
+    lula: store.lula,
+    flavio: store.flavio,
+    updatedAt: store.updatedAt,
   };
 }
 
-async function readPaid(): Promise<PaidScore> {
+async function readStore(): Promise<StoreScore> {
   if (hasRedis()) {
-    const data = await redis().get<PaidScore>(REDIS_KEY);
-    const paid = normalize(data ?? undefined);
-    globalThis.__racePaidScore = paid;
-    return paid;
+    try {
+      const data = await redis().get(REDIS_KEY);
+      const parsed = normalize(data);
+      if (parsed) {
+        globalThis.__racePaidScore = parsed;
+        return parsed;
+      }
+      // Chave vazia ou formato errado no console → grava placar fictício
+      const seeded = defaultScore();
+      await redis().set(REDIS_KEY, seeded);
+      globalThis.__racePaidScore = seeded;
+      return seeded;
+    } catch (err) {
+      console.error("Redis read failed:", err);
+      return globalThis.__racePaidScore ?? defaultScore();
+    }
   }
 
   if (globalThis.__racePaidScore) {
@@ -81,24 +114,39 @@ async function readPaid(): Promise<PaidScore> {
   try {
     await fs.mkdir(path.dirname(filePath()), { recursive: true });
     const raw = await fs.readFile(filePath(), "utf8");
-    const paid = normalize(JSON.parse(raw) as Partial<PaidScore>);
-    globalThis.__racePaidScore = paid;
-    return paid;
+    const parsed = normalize(JSON.parse(raw));
+    if (parsed) {
+      globalThis.__racePaidScore = parsed;
+      return parsed;
+    }
   } catch {
-    globalThis.__racePaidScore = normalize(EMPTY_PAID);
-    return globalThis.__racePaidScore;
+    // cria abaixo
   }
+
+  const seeded = defaultScore();
+  globalThis.__racePaidScore = seeded;
+  try {
+    await fs.mkdir(path.dirname(filePath()), { recursive: true });
+    await fs.writeFile(filePath(), JSON.stringify(seeded, null, 2));
+  } catch {
+    // ignore
+  }
+  return seeded;
 }
 
-async function writePaid(paid: PaidScore): Promise<PaidScore> {
-  const next = normalize({
-    ...paid,
+async function writeStore(store: StoreScore): Promise<StoreScore> {
+  const next: StoreScore = {
+    ...store,
     updatedAt: new Date().toISOString(),
-  });
+  };
   globalThis.__racePaidScore = next;
 
   if (hasRedis()) {
-    await redis().set(REDIS_KEY, next);
+    try {
+      await redis().set(REDIS_KEY, next);
+    } catch (err) {
+      console.error("Redis write failed:", err);
+    }
     return next;
   }
 
@@ -106,7 +154,7 @@ async function writePaid(paid: PaidScore): Promise<PaidScore> {
     await fs.mkdir(path.dirname(filePath()), { recursive: true });
     await fs.writeFile(filePath(), JSON.stringify(next, null, 2));
   } catch {
-    // sem disco: só memória
+    // ignore
   }
   return next;
 }
@@ -116,23 +164,24 @@ export function persistenceMode(): "redis" | "file" {
 }
 
 export async function readScore(): Promise<Score> {
-  return toDisplay(await readPaid());
+  return toScore(await readStore());
 }
 
+/** Soma votos após PIX confirmado e salva (Redis/arquivo). */
 export async function applyPaidDelta(delta: {
   lula?: number;
   flavio?: number;
   paymentId?: string;
 }): Promise<Score> {
-  const paid = await readPaid();
+  const store = await readStore();
 
-  if (delta.paymentId && paid.appliedPayments.includes(delta.paymentId)) {
-    return toDisplay(paid);
+  if (delta.paymentId && store.appliedPayments.includes(delta.paymentId)) {
+    return toScore(store);
   }
 
-  paid.lula = Math.max(0, paid.lula + (delta.lula ?? 0));
-  paid.flavio = Math.max(0, paid.flavio + (delta.flavio ?? 0));
-  if (delta.paymentId) paid.appliedPayments.push(delta.paymentId);
+  store.lula = Math.max(0, store.lula + (delta.lula ?? 0));
+  store.flavio = Math.max(0, store.flavio + (delta.flavio ?? 0));
+  if (delta.paymentId) store.appliedPayments.push(delta.paymentId);
 
-  return toDisplay(await writePaid(paid));
+  return toScore(await writeStore(store));
 }
