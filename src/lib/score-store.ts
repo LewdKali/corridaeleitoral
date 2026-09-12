@@ -1,3 +1,4 @@
+import { Redis } from "@upstash/redis";
 import { promises as fs } from "fs";
 import path from "path";
 import type { Score } from "./votes";
@@ -16,64 +17,89 @@ const EMPTY_PAID: PaidScore = {
   updatedAt: new Date().toISOString(),
 };
 
+const REDIS_KEY = "corrida:score";
+
 declare global {
   // eslint-disable-next-line no-var
   var __racePaidScore: PaidScore | undefined;
 }
 
-function dataPath() {
+function hasRedis() {
+  return Boolean(
+    process.env.UPSTASH_REDIS_REST_URL?.trim() &&
+      process.env.UPSTASH_REDIS_REST_TOKEN?.trim(),
+  );
+}
+
+function redis() {
+  return Redis.fromEnv();
+}
+
+function filePath() {
+  // Local: pasta data/. Na Vercel sem Redis, /tmp NÃO sobrevive — por isso Redis é obrigatório em prod.
   const root = process.env.VERCEL ? "/tmp" : path.join(process.cwd(), "data");
   return path.join(root, "score.json");
 }
 
-async function ensureFile() {
-  const file = dataPath();
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  try {
-    await fs.access(file);
-  } catch {
-    await fs.writeFile(file, JSON.stringify(EMPTY_PAID, null, 2));
-  }
+function normalize(raw: Partial<PaidScore> | null | undefined): PaidScore {
+  if (!raw) return { ...EMPTY_PAID, updatedAt: new Date().toISOString() };
+  return {
+    lula: Math.max(0, Number(raw.lula) || 0),
+    flavio: Math.max(0, Number(raw.flavio) || 0),
+    appliedPayments: Array.isArray(raw.appliedPayments)
+      ? raw.appliedPayments.map(String).slice(-500)
+      : [],
+    updatedAt: raw.updatedAt ?? new Date().toISOString(),
+  };
 }
 
 async function readPaid(): Promise<PaidScore> {
+  if (hasRedis()) {
+    const data = await redis().get<PaidScore>(REDIS_KEY);
+    const paid = normalize(data ?? undefined);
+    globalThis.__racePaidScore = paid;
+    return paid;
+  }
+
   if (globalThis.__racePaidScore) {
     return globalThis.__racePaidScore;
   }
+
   try {
-    await ensureFile();
-    const raw = await fs.readFile(dataPath(), "utf8");
-    const parsed = JSON.parse(raw) as Partial<PaidScore>;
-    const paid: PaidScore = {
-      lula: Math.max(0, Number(parsed.lula) || 0),
-      flavio: Math.max(0, Number(parsed.flavio) || 0),
-      appliedPayments: Array.isArray(parsed.appliedPayments)
-        ? parsed.appliedPayments.map(String)
-        : [],
-      updatedAt: parsed.updatedAt ?? new Date().toISOString(),
-    };
+    await fs.mkdir(path.dirname(filePath()), { recursive: true });
+    const raw = await fs.readFile(filePath(), "utf8");
+    const paid = normalize(JSON.parse(raw) as Partial<PaidScore>);
     globalThis.__racePaidScore = paid;
     return paid;
   } catch {
-    globalThis.__racePaidScore = { ...EMPTY_PAID };
+    globalThis.__racePaidScore = normalize(EMPTY_PAID);
     return globalThis.__racePaidScore;
   }
 }
 
 async function writePaid(paid: PaidScore): Promise<PaidScore> {
-  const next = {
+  const next = normalize({
     ...paid,
-    appliedPayments: paid.appliedPayments.slice(-500),
     updatedAt: new Date().toISOString(),
-  };
+  });
   globalThis.__racePaidScore = next;
+
+  if (hasRedis()) {
+    await redis().set(REDIS_KEY, next);
+    return next;
+  }
+
   try {
-    await ensureFile();
-    await fs.writeFile(dataPath(), JSON.stringify(next, null, 2));
+    await fs.mkdir(path.dirname(filePath()), { recursive: true });
+    await fs.writeFile(filePath(), JSON.stringify(next, null, 2));
   } catch {
-    // cold start sem disco: mantém em memória
+    // sem disco: só memória
   }
   return next;
+}
+
+export function persistenceMode(): "redis" | "file" {
+  return hasRedis() ? "redis" : "file";
 }
 
 export async function readScore(): Promise<Score> {
@@ -102,9 +128,7 @@ export async function applyPaidDelta(delta: {
 
   paid.lula = Math.max(0, paid.lula + (delta.lula ?? 0));
   paid.flavio = Math.max(0, paid.flavio + (delta.flavio ?? 0));
-  if (delta.paymentId) {
-    paid.appliedPayments.push(delta.paymentId);
-  }
+  if (delta.paymentId) paid.appliedPayments.push(delta.paymentId);
 
   const next = await writePaid(paid);
   return {

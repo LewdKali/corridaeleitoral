@@ -26,6 +26,7 @@ export function VotePanel({ onPaid }: Props) {
       if (!res.ok) {
         throw new Error(data.error ?? "Falha no checkout");
       }
+
       if (data.mode === "pix" && data.qrCode && data.paymentId) {
         setPix({
           paymentId: String(data.paymentId),
@@ -36,9 +37,23 @@ export function VotePanel({ onPaid }: Props) {
         });
         return;
       }
-      if (data.score) {
-        onPaid(data.score);
+
+      if (data.mode === "mercadopago" && data.checkoutUrl) {
+        if (data.warning) {
+          setError(`Abrindo PIX no Mercado Pago… (${data.warning})`);
+        }
+        window.location.href = data.checkoutUrl as string;
+        return;
       }
+
+      if (data.score) {
+        onPaid(data.score as Score);
+        return;
+      }
+
+      throw new Error(
+        "Resposta inesperada do checkout. Confira o token do Mercado Pago na Vercel.",
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro inesperado");
     } finally {
@@ -65,7 +80,7 @@ export function VotePanel({ onPaid }: Props) {
         />
       </div>
       {error && (
-        <p className="mx-auto mt-6 max-w-5xl text-center text-sm text-lula">
+        <p className="mx-auto mt-6 max-w-5xl break-words text-center text-sm text-lula">
           {error}
         </p>
       )}
