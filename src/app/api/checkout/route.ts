@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  createMercadoPagoPreference,
+  createPixPayment,
   findPackage,
   hasMercadoPago,
 } from "@/lib/mercadopago";
@@ -22,7 +22,6 @@ export async function POST(request: Request) {
       ? { lula: pkg.votes }
       : { flavio: pkg.votes };
 
-  // Só demo se não houver token — com MP configurado, sempre checkout real
   if (!hasMercadoPago()) {
     const score = await applyPaidDelta(delta);
     return NextResponse.json({
@@ -38,18 +37,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const preference = await createMercadoPagoPreference(pkg);
-    const useSandbox = process.env.MERCADOPAGO_SANDBOX === "true";
+    const pix = await createPixPayment(pkg);
     return NextResponse.json({
-      mode: "mercadopago",
-      preferenceId: preference.id,
-      checkoutUrl: useSandbox
-        ? preference.sandbox_init_point
-        : preference.init_point,
+      mode: "pix",
+      ...pix,
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Falha ao criar checkout";
+      error instanceof Error ? error.message : "Falha ao criar PIX";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PixModal, type PixPayload } from "@/components/PixModal";
 import { PACKAGES, type Candidate, type Score, type VotePackage } from "@/lib/votes";
 
 type Props = {
@@ -10,6 +11,7 @@ type Props = {
 export function VotePanel({ onPaid }: Props) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pix, setPix] = useState<PixPayload | null>(null);
 
   async function checkout(pkg: VotePackage) {
     setLoadingId(pkg.id);
@@ -24,8 +26,14 @@ export function VotePanel({ onPaid }: Props) {
       if (!res.ok) {
         throw new Error(data.error ?? "Falha no checkout");
       }
-      if (data.mode === "mercadopago" && data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
+      if (data.mode === "pix" && data.qrCode && data.paymentId) {
+        setPix({
+          paymentId: String(data.paymentId),
+          amountBrl: Number(data.amountBrl),
+          packageId: String(data.packageId),
+          qrCode: String(data.qrCode),
+          qrCodeBase64: String(data.qrCodeBase64 ?? ""),
+        });
         return;
       }
       if (data.score) {
@@ -57,9 +65,16 @@ export function VotePanel({ onPaid }: Props) {
         />
       </div>
       {error && (
-        <p className="mx-auto mt-6 max-w-5xl text-center text-sm text-lula-deep">
+        <p className="mx-auto mt-6 max-w-5xl text-center text-sm text-lula">
           {error}
         </p>
+      )}
+      {pix && (
+        <PixModal
+          pix={pix}
+          onClose={() => setPix(null)}
+          onPaid={onPaid}
+        />
       )}
     </section>
   );
@@ -158,7 +173,7 @@ function PackageButton({
     >
       <span>{pkg.label}</span>
       <span className="text-xs uppercase tracking-wider opacity-80">
-        {loading ? "..." : "pagar"}
+        {loading ? "..." : "PIX"}
       </span>
     </button>
   );
