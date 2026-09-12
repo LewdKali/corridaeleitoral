@@ -34,6 +34,7 @@ export function VotePanel({ onPaid }: Props) {
           packageId: String(data.packageId),
           qrCode: String(data.qrCode),
           qrCodeBase64: String(data.qrCodeBase64 ?? ""),
+          gateway: data.gateway === "mercadopago" ? "mercadopago" : "asaas",
         });
         return;
       }
@@ -46,13 +47,9 @@ export function VotePanel({ onPaid }: Props) {
         return;
       }
 
-      if (data.score) {
-        onPaid(data.score as Score);
-        return;
-      }
-
       throw new Error(
-        "Resposta inesperada do checkout. Confira o token do Mercado Pago na Vercel.",
+        data.error ??
+          "Configure ASAAS_API_KEY na Vercel. Votos só entram após PIX pago.",
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro inesperado");

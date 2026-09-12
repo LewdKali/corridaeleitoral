@@ -9,6 +9,7 @@ export type PixPayload = {
   packageId: string;
   qrCode: string;
   qrCodeBase64: string;
+  gateway?: "asaas" | "mercadopago";
 };
 
 type Props = {
@@ -19,15 +20,18 @@ type Props = {
 
 export function PixModal({ pix, onClose, onPaid }: Props) {
   const [copied, setCopied] = useState(false);
-  const [status, setStatus] = useState("Aguardando pagamento...");
+  const [status, setStatus] = useState("Aguardando pagamento PIX...");
 
   useEffect(() => {
     let stopped = false;
+    const gateway = pix.gateway ?? "asaas";
+
     const tick = async () => {
       try {
-        const res = await fetch(`/api/payment/${pix.paymentId}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `/api/payment/${encodeURIComponent(pix.paymentId)}?gateway=${gateway}`,
+          { cache: "no-store" },
+        );
         const data = await res.json();
         if (!res.ok || stopped) return;
 
@@ -37,13 +41,18 @@ export function PixModal({ pix, onClose, onPaid }: Props) {
           setTimeout(onClose, 900);
           return;
         }
-        if (data.status === "cancelled" || data.status === "rejected") {
-          setStatus("Pagamento cancelado ou recusado.");
+        if (
+          data.status === "cancelled" ||
+          data.status === "rejected" ||
+          data.status === "overdue" ||
+          data.status === "deleted"
+        ) {
+          setStatus("Pagamento cancelado ou expirado.");
           return;
         }
         setStatus("Aguardando PIX...");
       } catch {
-        // ignore poll errors
+        // ignore
       }
     };
 
@@ -53,7 +62,7 @@ export function PixModal({ pix, onClose, onPaid }: Props) {
       stopped = true;
       clearInterval(id);
     };
-  }, [pix.paymentId, onClose, onPaid]);
+  }, [pix.paymentId, pix.gateway, onClose, onPaid]);
 
   async function copyCode() {
     try {
