@@ -18,10 +18,8 @@ export function RaceApp() {
   const [ready, setReady] = useState(false);
   const [pagoMsg, setPagoMsg] = useState<string | null>(null);
 
-  const refresh = useCallback(async (tick = true) => {
-    const res = await fetch(`/api/score${tick ? "" : "?tick=0"}`, {
-      cache: "no-store",
-    });
+  const refresh = useCallback(async () => {
+    const res = await fetch("/api/score", { cache: "no-store" });
     if (!res.ok) return;
     const data = (await res.json()) as Score;
     setScore((prev) => {
@@ -34,8 +32,8 @@ export function RaceApp() {
   }, []);
 
   useEffect(() => {
-    void refresh(true);
-    const id = setInterval(() => void refresh(true), 5000);
+    void refresh();
+    const id = setInterval(() => void refresh(), 10000);
     return () => clearInterval(id);
   }, [refresh]);
 
@@ -43,8 +41,8 @@ export function RaceApp() {
     const params = new URLSearchParams(window.location.search);
     const pago = params.get("pago");
     if (pago === "ok") {
-      setPagoMsg("Pagamento recebido! O placar atualiza em instantes.");
-      void refresh(false);
+      setPagoMsg("Pagamento recebido! O placar atualiza quando o MP confirmar.");
+      void refresh();
     } else if (pago === "pendente") {
       setPagoMsg("Pagamento pendente — assim que confirmar, os votos entram.");
     } else if (pago === "erro") {
@@ -70,17 +68,15 @@ export function RaceApp() {
           <p className="mt-1 font-display text-xl text-ink md:text-2xl">
             {ready ? statusMessage(score) : "Carregando placar..."}
           </p>
-          {pagoMsg && (
-            <p className="mt-2 text-sm text-flavio">{pagoMsg}</p>
-          )}
+          {pagoMsg && <p className="mt-2 text-sm text-flavio">{pagoMsg}</p>}
         </div>
       </section>
 
       <VotePanel onPaid={handlePaid} />
 
       <footer className="mx-auto max-w-3xl px-6 text-center text-xs leading-relaxed text-muted">
-        Os votos exibidos são participações simbólicas nesta paródia e o placar
-        inclui movimentações simuladas do jogo. Não representam voto eleitoral,
+        Os votos exibidos são participações simbólicas nesta paródia. Só entram
+        no placar após pagamento confirmado. Não representam voto eleitoral,
         pesquisa oficial, doação ou vínculo com candidato ou campanha.
       </footer>
     </main>
