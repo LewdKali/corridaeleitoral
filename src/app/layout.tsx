@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Bebas_Neue, Outfit } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const display = Bebas_Neue({
@@ -64,6 +65,7 @@ export default function RootLayout({
     <html lang="pt-BR" className={`${display.variable} ${body.variable} h-full`}>
       <body className="relative flex min-h-full flex-col antialiased">
         {children}
+        <Analytics />
       </body>
     </html>
   );
