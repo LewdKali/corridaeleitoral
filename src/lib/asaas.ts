@@ -66,11 +66,27 @@ async function getOrCreateCustomer(): Promise<string> {
   const fixed = process.env.ASAAS_CUSTOMER_ID?.trim();
   if (fixed) return fixed;
 
+  const cpf = (process.env.ASAAS_CUSTOMER_CPF ?? "").replace(/\D/g, "");
+  if (cpf.length !== 11 && cpf.length !== 14) {
+    throw new Error(
+      "Asaas exige CPF/CNPJ. Na Vercel, crie ASAAS_CUSTOMER_CPF com o CPF (11 dígitos) ou CNPJ (14) do dono da conta Asaas — só números.",
+    );
+  }
+
+  const listed = (await asaasFetch(
+    `/v3/customers?cpfCnpj=${cpf}&limit=1`,
+  )) as { data?: Array<{ id: string }> };
+
+  if (listed.data?.[0]?.id) {
+    return listed.data[0].id;
+  }
+
   const customer = (await asaasFetch("/v3/customers", {
     method: "POST",
     body: JSON.stringify({
-      name: "Votante Corrida Eleitoral",
-      email: `votante.${Date.now()}@gmail.com`,
+      name: "Cliente Corrida Eleitoral",
+      email: `corrida.${cpf.slice(-4)}@gmail.com`,
+      cpfCnpj: cpf,
       notificationDisabled: true,
     }),
   })) as { id: string };
