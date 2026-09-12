@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   return NextResponse.json(
     {
       error:
-        "Nenhum gateway configurado. Na Vercel, defina ASAAS_API_KEY (recomendado) ou MERCADOPAGO_ACCESS_TOKEN.",
+        "ASAAS_API_KEY não encontrada neste deploy. Na Vercel → Settings → Environment Variables, crie ASAAS_API_KEY. Como a chave começa com $, cole assim: $$aact_prod_... (dois cifrões) ou só aact_prod_... sem o $. Depois Redeploy.",
       persistence: persistenceMode(),
     },
     { status: 503 },

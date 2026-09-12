@@ -7,7 +7,11 @@ function asaasBase() {
 }
 
 function asaasKey() {
-  return process.env.ASAAS_API_KEY?.trim() ?? "";
+  let key = process.env.ASAAS_API_KEY?.trim() ?? "";
+  // Na Vercel, "$..." é interpolação de env. Use "$$aact_..." ou cole sem o $.
+  if (key.startsWith("$$")) key = key.slice(1);
+  if (key.startsWith("aact_")) key = `$${key}`;
+  return key;
 }
 
 export function hasAsaas(): boolean {
